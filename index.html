@@ -297,6 +297,11 @@
   .metric-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
   .metric-head .delta { font-weight: 800; font-size: 1.15rem; white-space: nowrap; }
   .metric .hint { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+  .metric-head .delta.worse { color: var(--muted); }
+  .metric .hint { font-variant-numeric: normal; }
+  .compare-sub { margin: 44px 0 6px; font-size: 1.2rem; }
+  .compare-sub + p { color: var(--ink-2); margin: 0 0 18px; max-width: 68ch; }
+  .method { margin-top: 20px; font-size: 0.88rem; color: var(--muted); max-width: 72ch; }
   .bars { margin-top: 16px; display: grid; gap: 10px; }
   .bar-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: center; font-size: 0.9rem; }
   .bar-row .who { color: var(--ink-2); }
@@ -547,10 +552,16 @@
 <section class="wrap" id="perbandingan">
   <div class="section-head">
     <h2>Flutter dibanding Swift</h2>
-    <p>Kedua aplikasi dibangun dalam mode Release untuk iPhone pada 30 Oktober 2026 dari kode terbaru masing-masing. Untuk semua angka di bawah, makin kecil makin baik.</p>
+    <p>Kedua aplikasi dibangun dalam mode Release untuk iPhone pada 30 Oktober 2026 dari kode terbaru masing-masing, lalu diukur di iPhone yang sama. Untuk semua angka di bawah, makin kecil makin baik.</p>
   </div>
   <p class="compare-legend"><span>Flutter</span><span class="k-swift">Swift</span></p>
+  <h3 class="compare-sub">Ukuran aplikasi</h3>
   <div class="compare" id="compare"></div>
+
+  <h3 class="compare-sub">Performa saat dijalankan</h3>
+  <p>Diukur dengan Instruments di iPhone 12 Pro (iOS 26.6.1): 20 kali buka aplikasi dari keadaan mati per aplikasi, ditambah 5–7 sampel memori, di layar awal sebelum login.</p>
+  <div class="compare" id="compare-perf"></div>
+  <p class="method">Cara ukur: build Release bertanda tangan development, server prod, urutan bergantian Flutter → Swift → Flutter → Swift, masing-masing 1 kali pemanasan lalu 10 kali buka. Angka yang ditampilkan adalah median. "Siap dan tenang" adalah titik ketika CPU aplikasi sudah di bawah 0,1 core selama 1 detik penuh. Memori adalah physical footprint dari Activity Monitor, 12 detik setelah aplikasi dibuka. Suhu perangkat normal sepanjang pengujian.</p>
 
   <div class="why">
     <div>
@@ -566,9 +577,10 @@
       <h3>Apa artinya bagi pengguna</h3>
       <ul>
         <li>Unduhan dari App Store kira-kira 61% lebih kecil.</li>
-        <li>Framework yang dimuat saat aplikasi dibuka turun dari 76 menjadi 33, sehingga waktu buka aplikasi diperkirakan lebih cepat.</li>
-        <li>Tanpa engine Flutter di memori, pemakaian RAM diperkirakan lebih hemat.</li>
-        <li>Waktu buka, RAM, dan kelancaran scroll belum diukur. Angka pastinya menunggu pengukuran dengan Instruments di iPhone fisik.</li>
+        <li>Memori di layar awal turun dari sekitar 124 MB menjadi 20 MB, karena tidak ada engine Flutter dan isolate Dart di memori.</li>
+        <li>Aplikasi Swift sudah siap dan tenang sekitar 23% lebih cepat, dengan CPU saat startup 22% lebih sedikit.</li>
+        <li>Frame pertama Swift justru sedikit lebih lambat (632 ms dibanding 596 ms). Flutter cepat menampilkan frame native, tetapi butuh waktu lebih lama sampai UI Dart selesai dan tenang.</li>
+        <li>Waktu layar Dashboard, membuka PDF, dan kelancaran scroll belum diukur karena butuh akun login dan interaksi di perangkat.</li>
       </ul>
     </div>
   </div>
@@ -656,26 +668,68 @@
     { name: "Pod CocoaPods", hint: "Jumlah dependensi iOS", unit: "", flutter: 266, swift: 51 }
   ];
 
-  const compare = document.getElementById("compare");
+  // Measured on iPhone 12 Pro with Instruments (median of 20 launches and 5-7 memory samples).
+  const perf = [
+      {
+          "name": "Buka aplikasi → frame pertama",
+          "hint": "Median 20 kali buka; p95 Flutter 620 ms, Swift 662 ms",
+          "unit": " ms",
+          "flutter": 596,
+          "swift": 632
+      },
+      {
+          "name": "Buka aplikasi → siap dan tenang",
+          "hint": "CPU di bawah 0,1 core selama 1 detik; p95 Flutter 1800 ms, Swift 1300 ms",
+          "unit": " ms",
+          "flutter": 1300,
+          "swift": 1000
+      },
+      {
+          "name": "CPU selama 5 detik pertama",
+          "hint": "Total waktu CPU semua thread aplikasi",
+          "unit": " s",
+          "flutter": 1.17,
+          "swift": 0.91
+      },
+      {
+          "name": "Memori di layar awal",
+          "hint": "Physical footprint; Flutter 124,1–124,7 MB, Swift 18,3–21,2 MB",
+          "unit": " MB",
+          "flutter": 124.4,
+          "swift": 19.6
+      },
+      {
+          "name": "CPU saat diam",
+          "hint": "Rata-rata di layar awal; selisihnya kecil, praktis setara. Thread aktif Flutter 13, Swift 7",
+          "unit": "%",
+          "flutter": 1.06,
+          "swift": 0.98
+      }
+  ];
+
   const tbody = document.querySelector("#compare-table tbody");
-  metrics.forEach(m => {
+  const fmt = v => v.toLocaleString("id-ID");
+  const render = (list, compare) => list.forEach(m => {
     const max = Math.max(m.flutter, m.swift);
     const delta = Math.round((m.swift - m.flutter) / m.flutter * 100);
     const deltaText = (delta < 0 ? "−" : "+") + Math.abs(delta) + "%";
+    const worse = delta > 0 ? " worse" : "";
     const card = document.createElement("article");
     card.className = "metric";
     card.innerHTML = `
-      <div class="metric-head"><h3>${m.name}</h3><span class="delta">${deltaText}</span></div>
+      <div class="metric-head"><h3>${m.name}</h3><span class="delta${worse}">${deltaText}</span></div>
       <p class="hint">${m.hint}</p>
       <div class="bars">
-        <div class="bar-row"><span class="who">Flutter</span><span class="bar-line"><span class="bar" style="width:${m.flutter / max * 80}%"></span><span class="val">${m.flutter}${m.unit}</span></span></div>
-        <div class="bar-row"><span class="who">Swift</span><span class="bar-line"><span class="bar swift" style="width:${m.swift / max * 80}%"></span><span class="val">${m.swift}${m.unit}</span></span></div>
+        <div class="bar-row"><span class="who">Flutter</span><span class="bar-line"><span class="bar" style="width:${m.flutter / max * 80}%"></span><span class="val">${fmt(m.flutter)}${m.unit}</span></span></div>
+        <div class="bar-row"><span class="who">Swift</span><span class="bar-line"><span class="bar swift" style="width:${m.swift / max * 80}%"></span><span class="val">${fmt(m.swift)}${m.unit}</span></span></div>
       </div>`;
     compare.appendChild(card);
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${m.name}</td><td class="num">${m.flutter}${m.unit}</td><td class="num">${m.swift}${m.unit}</td><td class="num">${deltaText}</td>`;
+    tr.innerHTML = `<td>${m.name}</td><td class="num">${fmt(m.flutter)}${m.unit}</td><td class="num">${fmt(m.swift)}${m.unit}</td><td class="num">${deltaText}</td>`;
     tbody.appendChild(tr);
   });
+  render(metrics, document.getElementById("compare"));
+  render(perf, document.getElementById("compare-perf"));
 
   // Start the signature stroke once the brush font is ready.
   document.fonts.ready.then(() => document.getElementById("signature").classList.add("go"));
