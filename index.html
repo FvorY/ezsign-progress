@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>17 hari di ezSign · Ferdy Cahya</title>
+<meta name="description" content="Catatan harian Ferdy Cahya: CI/CD, SDK tanda tangan PDF, SDK eKYC, dan migrasi aplikasi iOS ezSign dari Flutter ke Swift.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Comforter+Brush&family=Schibsted+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --desk: #edf0f5;
+    --paper: #ffffff;
+    --ink: #272650;
+    --ink-2: #4f5470;
+    --muted: #767c96;
+    --line: #d9dee8;
+    --cyan: #15c1e7;
+    --cyan-ink: #08789a;
+    --series-flutter: #b3bac9;
+    --series-swift: #272650;
+    --focus: #08789a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --desk: #15162e;
+      --paper: #1f2045;
+      --ink: #eceef8;
+      --ink-2: #bcc0d8;
+      --muted: #9196b3;
+      --line: #35386a;
+      --cyan: #3fd0f0;
+      --cyan-ink: #6fdcf5;
+      --series-flutter: #5d628a;
+      --series-swift: #3fd0f0;
+      --focus: #6fdcf5;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--desk);
+    color: var(--ink);
+    font-family: "Schibsted Grotesk", system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.55;
+  }
+  .strip, .metric, table, .facts dt { font-variant-numeric: tabular-nums; }
+  a { color: var(--cyan-ink); text-underline-offset: 3px; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+
+  .wrap { width: min(1032px, 100% - 48px); margin-inline: auto; }
+
+  h1, h2, h3 { line-height: 1.15; margin: 0; }
+  h2 { font-size: 1.85rem; font-weight: 800; letter-spacing: -0.01em; }
+  h3 { font-size: 1.1rem; font-weight: 700; }
+  p { margin: 0; }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 56px;
+    align-items: center;
+    padding-block: 88px 72px;
+  }
+  .hero h1 {
+    font-size: clamp(2.6rem, 6vw, 4.4rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+  .hero .lede {
+    margin-top: 20px;
+    font-size: 1.2rem;
+    color: var(--ink-2);
+    max-width: 34ch;
+  }
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 28px;
+    margin: 36px 0 0;
+    padding: 0;
+    max-width: 30rem;
+  }
+  .facts div { border-top: 2px solid var(--ink); padding-top: 8px; }
+  .facts dt { font-weight: 700; font-size: 1.05rem; }
+  .facts dd { margin: 2px 0 0; color: var(--ink-2); font-size: 0.95rem; }
+
+  /* The signed page */
+  .page {
+    position: relative;
+    background: var(--paper);
+    border-radius: 6px;
+    box-shadow: 0 1px 0 var(--line), 0 24px 48px -28px rgba(39, 38, 80, 0.45);
+    padding: 40px 36px 44px;
+    aspect-ratio: 210 / 260;
+  }
+  .page .doc-title { font-weight: 700; font-size: 0.95rem; }
+  .page .doc-meta { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+  .lines { margin-top: 22px; display: grid; gap: 11px; }
+  .lines span { display: block; height: 7px; border-radius: 4px; background: var(--line); }
+  .lines span:nth-child(3n) { width: 82%; }
+  .lines span:nth-child(5n) { width: 64%; }
+
+  .placement {
+    position: absolute;
+    left: 32%;
+    bottom: 12%;
+    width: 58%;
+    height: 24%;
+    border: 2px dashed var(--cyan);
+    border-radius: 4px;
+  }
+  .placement .handle {
+    position: absolute;
+    width: 11px; height: 11px;
+    background: var(--paper);
+    border: 2px solid var(--cyan);
+    border-radius: 50%;
+  }
+  .placement .h1 { left: -7px; top: -7px; }
+  .placement .h2 { right: -7px; top: -7px; }
+  .placement .h3 { left: -7px; bottom: -7px; }
+  .placement .h4 { right: -7px; bottom: -7px; }
+  .coord {
+    position: absolute;
+    left: -2px;
+    top: -30px;
+    font-size: 0.75rem;
+    color: var(--cyan-ink);
+    white-space: nowrap;
+  }
+  .origin {
+    position: absolute;
+    left: 10px; top: 10px;
+    width: 18px; height: 18px;
+    border-left: 2px solid var(--cyan);
+    border-top: 2px solid var(--cyan);
+  }
+  .signature { position: absolute; inset: 6% 4% 0; width: 92%; height: 94%; overflow: visible; }
+  .signature text {
+    font-family: "Comforter Brush", cursive;
+    font-size: 66px;
+    fill: var(--ink);
+    fill-opacity: 0;
+    stroke: var(--ink);
+    stroke-width: 1.1;
+    stroke-dasharray: 900;
+    stroke-dashoffset: 900;
+  }
+  .signature.go text { animation: write 2.2s ease-out forwards, ink 0.6s 1.9s ease-out forwards; }
+  @keyframes write { to { stroke-dashoffset: 0; } }
+  @keyframes ink { to { fill-opacity: 1; stroke-width: 0; } }
+  .signed-at {
+    position: absolute;
+    left: 32%;
+    bottom: 6%;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .signature text, .signature.go text { animation: none; stroke-dashoffset: 0; fill-opacity: 1; stroke-width: 0; }
+  }
+
+  /* ---------- Sections ---------- */
+  section { padding-block: 72px; border-top: 1px solid var(--line); }
+  .section-head { max-width: 62ch; margin-bottom: 36px; }
+  .section-head p { margin-top: 12px; color: var(--ink-2); }
+
+  /* ---------- Progress strip ---------- */
+  .strip-scroll { overflow-x: auto; padding-bottom: 8px; }
+  .strip {
+    min-width: 720px;
+    display: grid;
+    grid-template-columns: 210px repeat(17, minmax(0, 1fr));
+    row-gap: 4px;
+    background: var(--paper);
+    border-radius: 6px;
+    padding: 20px 20px 14px;
+  }
+  .strip .day-h {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-align: center;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  .strip .row-label {
+    font-weight: 500;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    min-height: 58px;
+    padding-right: 12px;
+  }
+  .strip .cell { position: relative; min-height: 58px; }
+  .strip .track {
+    position: absolute;
+    top: 38px;
+    height: 2px;
+    background: var(--ink);
+    opacity: 0.35;
+  }
+  .strip .dot {
+    position: absolute;
+    left: 50%; top: 32px;
+    width: 14px; height: 14px;
+    margin-left: -7px;
+    border-radius: 50%;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+  }
+  .strip .dot.done { background: var(--ink); }
+  .strip .pct {
+    position: absolute;
+    left: 50%; top: 8px;
+    transform: translateX(-50%);
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .legend-note { margin-top: 12px; font-size: 0.9rem; color: var(--muted); display: flex; gap: 20px; flex-wrap: wrap; }
+  .legend-note span::before {
+    content: "";
+    display: inline-block;
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    border: 2px solid var(--ink);
+    margin-right: 7px;
+    vertical-align: -1px;
+  }
+  .legend-note .k-done::before { background: var(--ink); }
+
+  /* ---------- Log ---------- */
+  .log { list-style: none; margin: 0; padding: 0; }
+  .entry {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 28px;
+    padding: 26px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .entry:first-child { padding-top: 0; }
+  .entry:last-child { border-bottom: 0; padding-bottom: 0; }
+  .entry .day { font-weight: 800; font-size: 1.35rem; letter-spacing: -0.01em; }
+  .entry .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .tag {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--ink-2);
+    background: var(--paper);
+  }
+  .entry ul { margin: 0; padding-left: 1.1em; max-width: 68ch; }
+  .entry li + li { margin-top: 6px; }
+  .entry li::marker { color: var(--muted); }
+  .entry .links { grid-column: 2; margin-top: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.95rem; }
+
+  /* ---------- Migration ---------- */
+  .mig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  .phases { list-style: none; margin: 0; padding: 0; counter-reset: ph; }
+  .phases li {
+    display: grid;
+    grid-template-columns: 74px 1fr;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.97rem;
+  }
+  .phases .ph { font-weight: 700; }
+  .phases .state { color: var(--muted); font-size: 0.85rem; display: block; }
+  .stack { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; font-size: 0.97rem; }
+  .stack dt { color: var(--muted); }
+  .stack dd { margin: 0; }
+  .callout {
+    margin-top: 28px;
+    background: var(--paper);
+    border-left: 4px solid var(--cyan);
+    border-radius: 0 6px 6px 0;
+    padding: 16px 20px;
+    color: var(--ink-2);
+    font-size: 0.97rem;
+  }
+
+  /* ---------- Comparison ---------- */
+  .compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  .metric { background: var(--paper); border-radius: 6px; padding: 20px 22px 18px; }
+  .metric-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .metric-head .delta { font-weight: 800; font-size: 1.15rem; white-space: nowrap; }
+  .metric .hint { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
+  .bars { margin-top: 16px; display: grid; gap: 10px; }
+  .bar-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: center; font-size: 0.9rem; }
+  .bar-row .who { color: var(--ink-2); }
+  .bar-line { display: flex; align-items: center; gap: 8px; }
+  .bar {
+    height: 14px;
+    border-radius: 0 4px 4px 0;
+    background: var(--series-flutter);
+    min-width: 3px;
+  }
+  .bar.swift { background: var(--series-swift); }
+  .bar-line .val { font-weight: 700; white-space: nowrap; }
+  .compare-legend { display: flex; gap: 22px; margin-bottom: 18px; font-size: 0.92rem; color: var(--ink-2); }
+  .compare-legend span::before {
+    content: ""; display: inline-block; width: 22px; height: 10px; border-radius: 0 3px 3px 0;
+    margin-right: 8px; vertical-align: 0; background: var(--series-flutter);
+  }
+  .compare-legend .k-swift::before { background: var(--series-swift); }
+
+  .why { margin-top: 36px; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  .why ul { margin: 12px 0 0; padding-left: 1.1em; }
+  .why li + li { margin-top: 8px; }
+  .why li::marker { color: var(--muted); }
+
+  details { margin-top: 28px; background: var(--paper); border-radius: 6px; padding: 14px 20px; }
+  summary { cursor: pointer; font-weight: 500; }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 0.95rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 700; }
+  td.num, th.num { text-align: right; }
+
+  /* ---------- Links ---------- */
+  .repos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 40px; }
+  .repos li { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .repos a { font-weight: 700; }
+  .repos p { color: var(--ink-2); font-size: 0.93rem; margin-top: 2px; }
+
+  footer { padding-block: 40px 64px; color: var(--muted); font-size: 0.9rem; border-top: 1px solid var(--line); }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; gap: 40px; padding-block: 56px 48px; }
+    .page { max-width: 420px; }
+    .mig-grid, .why, .compare, .repos { grid-template-columns: 1fr; }
+    .entry { grid-template-columns: 1fr; gap: 10px; }
+    .entry .links { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header class="wrap hero">
+  <div>
+    <h1>17 hari kerja di ezSign</h1>
+    <p class="lede">Catatan harian Ferdy Cahya: menyiapkan CI/CD, membangun dua SDK, dan memindahkan aplikasi iOS dari Flutter ke Swift.</p>
+    <dl class="facts">
+      <div><dt>4 SDK publik</dt><dd>Tanda tangan PDF dan eKYC, masing-masing untuk Android dan iOS</dd></div>
+      <div><dt>CI/CD dev dan prod</dt><dd>iOS dan Android, rilis dikabarkan lewat Telegram</dd></div>
+      <div><dt>Migrasi Swift</dt><dd>Seluruh layar sudah dipindah, kini tahap pengujian</dd></div>
+      <div><dt>978 tes otomatis</dt><dd>Menjaga alur Swift tetap sama dengan Flutter</dd></div>
+    </dl>
+  </div>
+
+  <figure class="page" aria-label="Ilustrasi halaman dokumen dengan kotak tanda tangan di koordinat tertentu">
+    <span class="origin" aria-hidden="true"></span>
+    <p class="doc-title">Laporan progres harian</p>
+    <p class="doc-meta">Hari 1 sampai 17, Oktober 2026</p>
+    <div class="lines" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span>
+    </div>
+    <div class="placement" aria-hidden="true">
+      <span class="coord">x 186, y 512 dari kiri atas</span>
+      <span class="handle h1"></span><span class="handle h2"></span>
+      <span class="handle h3"></span><span class="handle h4"></span>
+      <svg class="signature" id="signature" viewBox="0 0 300 110" preserveAspectRatio="xMidYMid meet">
+        <text x="150" y="78" text-anchor="middle">Ferdy Cahya</text>
+      </svg>
+    </div>
+    <p class="signed-at">Ditandatangani 30 Oktober 2026</p>
+  </figure>
+</header>
+
+<main>
+
+<section class="wrap" id="jalur">
+  <div class="section-head">
+    <h2>Progres per pekerjaan</h2>
+    <p>Persentase seperti yang dicatat di akhir tiap hari. Titik penuh berarti pekerjaan itu sudah selesai.</p>
+  </div>
+  <div class="strip-scroll">
+    <div class="strip" id="strip" role="table" aria-label="Progres per pekerjaan dari hari 1 sampai 17"></div>
+  </div>
+  <p class="legend-note"><span>Masih berjalan</span><span class="k-done">Selesai</span></p>
+</section>
+
+<section class="wrap" id="harian">
+  <div class="section-head">
+    <h2>Catatan harian</h2>
+    <p>Apa yang dikerjakan setiap hari, dari pemasangan Flutter sampai perapian hasil migrasi.</p>
+  </div>
+  <ol class="log">
+    <li class="entry">
+      <div><p class="day">Hari 1–2</p><div class="tags"><span class="tag">Rilis</span><span class="tag">Perbaikan bug</span></div></div>
+      <ul>
+        <li>Memasang Flutter dan aplikasi, lalu mendistribusikan build ke QC.</li>
+        <li>Memperbaiki crash di lingkungan dev yang muncul di distribusi pertama.</li>
+      </ul>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 3</p><div class="tags"><span class="tag">CI/CD</span><span class="tag">Perbaikan bug</span></div></div>
+      <ul>
+        <li>CI/CD iOS dev berhasil berjalan.</li>
+        <li>Memperbaiki rekey yang gagal (laporan QC) dan loading yang macet.</li>
+      </ul>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 4</p><div class="tags"><span class="tag">CI/CD</span><span class="tag">Perbaikan bug</span></div></div>
+      <ul>
+        <li>Menyiapkan CI/CD Android dev, memperbaiki pipeline, dan menambah release note ke Telegram.</li>
+        <li>Bulk: preview terlalu kecil setelah file list diubah, sekarang pas di layar.</li>
+        <li>Bulk: file list tidak lagi menutupi bagian bawah preview.</li>
+      </ul>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 5</p><div class="tags"><span class="tag">CI/CD</span><span class="tag">Perbaikan bug</span></div></div>
+      <ul>
+        <li>Memindahkan branch uji coba ios-devCI ke branch developer.</li>
+        <li>Menyiapkan uji coba pipeline prod untuk iOS dan Android.</li>
+        <li>Preview iOS kembali pas saat mengganti file di file list.</li>
+      </ul>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 6</p><div class="tags"><span class="tag">CI/CD</span><span class="tag">SDK</span></div></div>
+      <ul>
+        <li>Mac mini CI kini mati otomatis pukul 21.00 dan menyala pukul 07.30.</li>
+        <li>Job CI/CD yang terputus karena Mac mini mati atau restart menunggu, lalu lanjut saat mesin menyala lagi.</li>
+        <li>SDK preview PDF untuk Kotlin mencapai 50%.</li>
+        <li>Uji CI/CD prod iOS dan Android berhasil masuk.</li>
+      </ul>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 7–8</p><div class="tags"><span class="tag">CI/CD</span><span class="tag">SDK</span></div></div>
+      <ul>
+        <li>Pesan Telegram ke grup saat versi prod sudah terunggah ke Play Store dan App Store dan siap dirilis (rilisnya tetap manual).</li>
+        <li>SDK tanda tangan PDF untuk Kotlin dan Swift selesai 100%.</li>
+      </ul>
+      <p class="links"><a href="https://github.com/FvorY/pdf-signature-sdk-android">SDK Android</a><a href="https://github.com/FvorY/pdf-signature-sdk-ios">SDK iOS</a></p>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 9–10</p><div class="tags"><span class="tag">SDK</span><span class="tag">CI/CD</span><span class="tag">Migrasi</span></div></div>
+      <ul>
+        <li>Melengkapi dokumentasi dan menyelaraskan kode serta dokumentasi SDK iOS dan Android.</li>
+        <li>Menyusun rencana dan alur migrasi ke Swift.</li>
+        <li>Mempercepat CI/CD yang sempat timeout karena jaringan terputus.</li>
+        <li>Membuat aplikasi demo SDK.</li>
+      </ul>
+      <p class="links"><a href="https://github.com/FvorY/pdf-signature-sdk-ios/releases/tag/demo-ttd-cepat-1.0">Demo iOS</a><a href="https://github.com/FvorY/pdf-signature-sdk-android/releases/tag/demo-ttd-cepat-1.0">Demo Android</a></p>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 11</p><div class="tags"><span class="tag">Migrasi</span><span class="tag">SDK</span></div></div>
+      <ul>
+        <li>Menyiapkan migrasi Flutter ke iOS native.</li>
+        <li>Memvalidasi koordinat tanda tangan SDK lewat Postman dan aplikasi ezSign. Backend menghitung dari kiri bawah sedangkan SDK dari kiri atas; selisih ini sudah diperbaiki.</li>
+      </ul>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 12</p><div class="tags"><span class="tag">SDK</span><span class="tag">CI/CD</span><span class="tag">Migrasi</span></div></div>
+      <ul>
+        <li>Fitur SDK baru: isi koordinat dulu, lalu tanda tangan otomatis muncul di posisi itu.</li>
+        <li>Pipeline prod dipindah ke branch pre-prod-main.</li>
+        <li>Migrasi Flutter ke Swift mencapai 30%.</li>
+        <li>Melaporkan internal server error pada proses init sign ke tim backend.</li>
+      </ul>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 13</p><div class="tags"><span class="tag">Migrasi</span></div></div>
+      <ul>
+        <li>Kode migrasi iOS selesai 100%.</li>
+        <li>Pengujian hasil migrasi berjalan 20%.</li>
+      </ul>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 14</p><div class="tags"><span class="tag">SDK</span><span class="tag">Migrasi</span></div></div>
+      <ul>
+        <li>Merapikan dokumentasi SDK preview PDF.</li>
+        <li>Mulai SDK eKYC, sampai 20%.</li>
+        <li>Pengujian migrasi iOS sampai 30%.</li>
+      </ul>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 15</p><div class="tags"><span class="tag">SDK</span><span class="tag">CI/CD</span></div></div>
+      <ul>
+        <li>SDK eKYC mencapai 80%; tinggal pengujian liveness dan perapian dokumentasi.</li>
+        <li>Build prod kini mengirim APK split dan IPA ke Telegram lewat Gofile dalam zip berpassword.</li>
+      </ul>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 16</p><div class="tags"><span class="tag">SDK</span></div></div>
+      <ul>
+        <li>SDK eKYC selesai 100%, pengujian liveness tuntas, dan dokumentasi sudah dirapikan.</li>
+      </ul>
+      <p class="links"><a href="https://github.com/FvorY/ezsign-ekyc-sdk-android">SDK eKYC Android</a><a href="https://github.com/FvorY/ezsign-ekyc-sdk-ios">SDK eKYC iOS</a><a href="https://github.com/FvorY/ezsign-ekyc-sdk-ios/releases/tag/demo-ekyc-1.4">Demo eKYC iOS</a></p>
+    </li>
+    <li class="entry">
+      <div><p class="day">Hari 17</p><div class="tags"><span class="tag">Rilis</span><span class="tag">Migrasi</span></div></div>
+      <ul>
+        <li>Menangani crash rilis prod yang dilaporkan App Store Connect.</li>
+        <li>Merapikan navigasi aplikasi Swift dengan pola MainCoordinator, lalu membandingkan performa dengan Flutter.</li>
+      </ul>
+    </li>
+  </ol>
+</section>
+
+<section class="wrap" id="migrasi">
+  <div class="section-head">
+    <h2>Hasil migrasi ke Swift</h2>
+    <p>Aplikasi iOS ditulis ulang secara native dengan satu aturan: alurnya harus sama persis dengan Flutter. API, payload, percabangan kode respons, navigasi, dan penyimpanan tidak berubah.</p>
+  </div>
+  <div class="mig-grid">
+    <div>
+      <h3>Tahapan</h3>
+      <ol class="phases">
+        <li><span class="ph">Fase 0–3</span><span>Fondasi proyek, jaringan, penyimpanan, login<span class="state">Selesai</span></span></li>
+        <li><span class="ph">Fase 4–5</span><span>Beranda, dashboard, dokumen, diskusi, kontak<span class="state">Selesai</span></span></li>
+        <li><span class="ph">Fase 6–7</span><span>Unggah, penempatan tanda tangan, penerima, bulk, OTP, token, PIN<span class="state">Selesai</span></span></li>
+        <li><span class="ph">Fase 8–9</span><span>Profil, akun, spesimen, stempel, segel, template, workflow<span class="state">Selesai</span></span></li>
+        <li><span class="ph">Fase 10–11</span><span>Registrasi, eKYC dan liveness, saldo dan tagihan<span class="state">Selesai</span></span></li>
+        <li><span class="ph">Fase 12</span><span>QA di perangkat, CI/CD lewat Fastlane<span class="state">Berjalan; 136 dari 137 endpoint identik dengan Flutter</span></span></li>
+      </ol>
+    </div>
+    <div>
+      <h3>Teknologi</h3>
+      <dl class="stack" style="margin-top:12px">
+        <dt>UI</dt><dd>UIKit dengan XIB, font Montserrat</dd>
+        <dt>Arsitektur</dt><dd>MVVM, navigasi lewat MainCoordinator</dd>
+        <dt>Jaringan</dt><dd>Alamofire</dd>
+        <dt>PDF</dt><dd>SDK tanda tangan PDF milik sendiri</dd>
+        <dt>Keamanan</dt><dd>freeRASP (Talsec), deteksi jailbreak</dd>
+        <dt>Dependensi</dt><dd>CocoaPods</dd>
+        <dt>Minimum</dt><dd>iOS 15</dd>
+        <dt>Tes</dt><dd>978 tes unit dan perilaku, semua lulus</dd>
+      </dl>
+      <p class="callout">Saat Flutter berubah selama migrasi, perubahan itu ikut disinkronkan ke Swift. Contohnya fitur tanda tangan otomatis di semua halaman pada Sprint 28.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap" id="perbandingan">
+  <div class="section-head">
+    <h2>Flutter dibanding Swift</h2>
+    <p>Kedua aplikasi dibangun dalam mode Release untuk iPhone pada 30 Oktober 2026 dari kode terbaru masing-masing. Untuk semua angka di bawah, makin kecil makin baik.</p>
+  </div>
+  <p class="compare-legend"><span>Flutter</span><span class="k-swift">Swift</span></p>
+  <div class="compare" id="compare"></div>
+
+  <div class="why">
+    <div>
+      <h3>Dari mana selisih ukurannya</h3>
+      <ul>
+        <li>Engine Flutter dan kode Dart hasil kompilasi memakan 25 MB. Seluruh kode aplikasi Swift hanya 11 MB.</li>
+        <li>Font Inter 13 MB ikut dibundel di Flutter; versi Swift memakai Montserrat yang jauh lebih kecil.</li>
+        <li>Flutter membawa library tidak langsung seperti gRPC, OpenSSL, Firestore, dan SwiftProtobuf (sekitar 22 MB) yang tidak diperlukan versi Swift.</li>
+        <li>Batas minimum iOS 13 membuat Flutter ikut membawa Swift Concurrency (7,4 MB).</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Apa artinya bagi pengguna</h3>
+      <ul>
+        <li>Unduhan dari App Store kira-kira 61% lebih kecil.</li>
+        <li>Framework yang dimuat saat aplikasi dibuka turun dari 76 menjadi 33, sehingga waktu buka aplikasi diperkirakan lebih cepat.</li>
+        <li>Tanpa engine Flutter di memori, pemakaian RAM diperkirakan lebih hemat.</li>
+        <li>Waktu buka, RAM, dan kelancaran scroll belum diukur. Angka pastinya menunggu pengukuran dengan Instruments di iPhone fisik.</li>
+      </ul>
+    </div>
+  </div>
+
+  <details>
+    <summary>Lihat sebagai tabel</summary>
+    <table id="compare-table">
+      <thead><tr><th>Metrik</th><th class="num">Flutter</th><th class="num">Swift</th><th class="num">Selisih</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </details>
+</section>
+
+<section class="wrap" id="tautan">
+  <div class="section-head">
+    <h2>Repositori</h2>
+  </div>
+  <ul class="repos">
+    <li><a href="https://github.com/FvorY/pdf-signature-sdk-android">pdf-signature-sdk-android</a><p>Preview PDF dan penempatan tanda tangan untuk Android (Kotlin)</p></li>
+    <li><a href="https://github.com/FvorY/pdf-signature-sdk-ios">pdf-signature-sdk-ios</a><p>Preview PDF dan penempatan tanda tangan untuk iOS (Swift)</p></li>
+    <li><a href="https://github.com/FvorY/ezsign-ekyc-sdk-android">ezsign-ekyc-sdk-android</a><p>Verifikasi identitas dan liveness untuk Android (Kotlin)</p></li>
+    <li><a href="https://github.com/FvorY/ezsign-ekyc-sdk-ios">ezsign-ekyc-sdk-ios</a><p>Verifikasi identitas dan liveness untuk iOS (Swift)</p></li>
+  </ul>
+</section>
+
+</main>
+
+<footer class="wrap">Diperbarui 30 Oktober 2026 oleh Ferdy Cahya.</footer>
+
+<script>
+  // Progress per workstream; values are what was written in the daily recap.
+  const streams = [
+    { name: "SDK tanda tangan PDF", points: [[6, 50], [8, 100]] },
+    { name: "SDK eKYC", points: [[14, 20], [15, 80], [16, 100]] },
+    { name: "Kode migrasi Swift", points: [[12, 30], [13, 100]] },
+    { name: "Pengujian migrasi Swift", points: [[13, 20], [14, 30]] }
+  ];
+
+  const strip = document.getElementById("strip");
+  const add = (cls, text, role) => {
+    const el = document.createElement("div");
+    el.className = cls;
+    if (text) el.textContent = text;
+    if (role) el.setAttribute("role", role);
+    strip.appendChild(el);
+    return el;
+  };
+
+  add("day-h", "", "columnheader");
+  for (let d = 1; d <= 17; d++) add("day-h", "H" + d, "columnheader");
+
+  streams.forEach(s => {
+    add("row-label", s.name, "rowheader");
+    const first = s.points[0][0];
+    const last = s.points[s.points.length - 1][0];
+    const byDay = Object.fromEntries(s.points);
+    for (let d = 1; d <= 17; d++) {
+      const cell = add("cell", "", "cell");
+      if (d >= first && d < last) {
+        const track = document.createElement("span");
+        track.className = "track";
+        track.style.left = "50%";
+        track.style.right = "-50%";
+        cell.appendChild(track);
+      }
+      if (byDay[d] !== undefined) {
+        const pct = byDay[d];
+        const dot = document.createElement("span");
+        dot.className = "dot" + (pct === 100 ? " done" : "");
+        const label = document.createElement("span");
+        label.className = "pct";
+        label.textContent = pct + "%";
+        cell.title = s.name + ", hari " + d + ": " + pct + "%";
+        cell.setAttribute("aria-label", cell.title);
+        cell.append(label, dot);
+      }
+    }
+  });
+
+  // Flutter vs Swift, both Release builds for iPhone (30 Oct 2026).
+  const metrics = [
+    { name: "Ukuran unduhan (IPA)", hint: "Perkiraan dari IPA terkompresi", unit: " MB", flutter: 44, swift: 17 },
+    { name: "Ukuran terpasang (.app)", hint: "Isi bundel aplikasi", unit: " MB", flutter: 117, swift: 44 },
+    { name: "Framework saat dibuka", hint: "Library dinamis yang dimuat sebelum layar pertama", unit: "", flutter: 76, swift: 33 },
+    { name: "Pod CocoaPods", hint: "Jumlah dependensi iOS", unit: "", flutter: 266, swift: 51 }
+  ];
+
+  const compare = document.getElementById("compare");
+  const tbody = document.querySelector("#compare-table tbody");
+  metrics.forEach(m => {
+    const max = Math.max(m.flutter, m.swift);
+    const delta = Math.round((m.swift - m.flutter) / m.flutter * 100);
+    const deltaText = (delta < 0 ? "−" : "+") + Math.abs(delta) + "%";
+    const card = document.createElement("article");
+    card.className = "metric";
+    card.innerHTML = `
+      <div class="metric-head"><h3>${m.name}</h3><span class="delta">${deltaText}</span></div>
+      <p class="hint">${m.hint}</p>
+      <div class="bars">
+        <div class="bar-row"><span class="who">Flutter</span><span class="bar-line"><span class="bar" style="width:${m.flutter / max * 80}%"></span><span class="val">${m.flutter}${m.unit}</span></span></div>
+        <div class="bar-row"><span class="who">Swift</span><span class="bar-line"><span class="bar swift" style="width:${m.swift / max * 80}%"></span><span class="val">${m.swift}${m.unit}</span></span></div>
+      </div>`;
+    compare.appendChild(card);
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${m.name}</td><td class="num">${m.flutter}${m.unit}</td><td class="num">${m.swift}${m.unit}</td><td class="num">${deltaText}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Start the signature stroke once the brush font is ready.
+  document.fonts.ready.then(() => document.getElementById("signature").classList.add("go"));
+</script>
+</body>
+</html>
